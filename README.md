@@ -40,7 +40,7 @@ or
 
 spark-submit \
   --class com.example.producer.KafkaProducerApp \
-  --master local[4] \ 
+  --master local[4] \
   target/scala-2.13/uber-streaming-devops-assembly-0.1.0-SNAPSHOT.jar \
   -Dfile=ncr_ride_bookings.csv \
   -Ddelay.ms=100

@@ -7,16 +7,14 @@ lazy val root = (project in file("."))
     organization := "com.example",
 
     libraryDependencies ++= Seq(
-      // Spark (provided by Spark runtime)
       "org.apache.spark" %% "spark-core" % "4.0.1" % "provided",
       "org.apache.spark" %% "spark-sql" % "4.0.1" % "provided",
-      "org.apache.spark" %% "spark-sql-kafka-0-10" % "4.0.1" % "provided",
-
-      // Kafka client — MUST be included in JAR (not "provided")
-      "org.apache.kafka" % "kafka-clients" % "3.8.0"
+      "org.apache.spark" %% "spark-sql-kafka-0-10" % "4.0.1"
     ),
 
-    // Assembly settings
+    // 🔥 Force la version compatible de kafka-clients
+    dependencyOverrides += "org.apache.kafka" % "kafka-clients" % "3.6.1",
+
     assembly / assemblyJarName := s"${name.value}-assembly-${version.value}.jar",
     assembly / test := {},
     assembly / assemblyMergeStrategy := {

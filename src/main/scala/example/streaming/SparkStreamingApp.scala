@@ -15,21 +15,35 @@ object SparkStreamingApp {
     spark.sparkContext.setLogLevel("WARN")
     import spark.implicits._
 
-    // Configuration from system properties (set via -D or -- in spark-submit)
     val kafkaBootstrap = sys.props.getOrElse("kafka.bootstrap", "localhost:9092")
     val kafkaTopic     = sys.props.getOrElse("kafka.topic", "uber_topic")
     val parquetOut     = sys.props.getOrElse("parquet.out", "/tmp/uber_stream_output/parquet")
 
-    // Define expected schema from Kafka JSON
+    // ✅ Schéma exact basé sur les colonnes réelles du CSV
     val schema = new StructType()
-      .add("ride_id", StringType)
-      .add("pickup_datetime", StringType)
-      .add("dropoff_datetime", StringType)
-      .add("vehicle_type", StringType)
-      .add("passenger_count", IntegerType)
-      .add("fare_amount", DoubleType)
+      .add("Date", StringType)
+      .add("Time", StringType)
+      .add("Booking ID", StringType)
+      .add("Booking Status", StringType)
+      .add("Customer ID", StringType)
+      .add("Vehicle Type", StringType)
+      .add("Pickup Location", StringType)
+      .add("Drop Location", StringType)
+      .add("Avg VTAT", DoubleType)
+      .add("Avg CTAT", DoubleType)
+      .add("Cancelled Rides by Customer", IntegerType)
+      .add("Reason for cancelling by Customer", StringType)
+      .add("Cancelled Rides by Driver", IntegerType)
+      .add("Driver Cancellation Reason", StringType)
+      .add("Incomplete Rides", IntegerType)
+      .add("Incomplete Rides Reason", StringType)
+      .add("Booking Value", DoubleType)        // ← C'est le "fare"
+      .add("Ride Distance", DoubleType)
+      .add("Driver Ratings", DoubleType)
+      .add("Customer Rating", DoubleType)
+      .add("Payment Method", StringType)
 
-    // Read from Kafka
+    // Lecture Kafka
     val rawKafka = spark.readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", kafkaBootstrap)
@@ -37,39 +51,41 @@ object SparkStreamingApp {
       .option("startingOffsets", "earliest")
       .load()
 
-    // Parse JSON
+    // Parsing JSON
     val parsedDF = rawKafka
       .select(from_json(col("value").cast("string"), schema).as("data"))
       .select("data.*")
 
-    // Convert pickup time to timestamp (adjust format if needed)
+    // ✅ Combiner Date + Time en un seul timestamp (format réel du CSV)
     val dfWithTs = parsedDF
-      .withColumn(
-        "pickup_ts",
-        to_timestamp($"pickup_datetime", "yyyy-MM-dd HH:mm:ss")
-      )
-      .filter($"pickup_ts".isNotNull)
+      .withColumn("event_time_str", concat(col("Date"), lit(" "), col("Time")))
+      .withColumn("event_ts", to_timestamp(col("event_time_str"), "yyyy-MM-dd HH:mm:ss"))
+      .filter(col("event_ts").isNotNull)
+      .drop("event_time_str")
 
-    // Time-based aggregation with watermarking
+    // ✅ Agrégation : compter les réservations valides par type de véhicule
     val aggDF = dfWithTs
-      .withWatermark("pickup_ts", "2 minutes")
+      .filter(col("Booking Status") === "Completed") // Ignore cancelled/incomplete
+      .withWatermark("event_ts", "2 minutes")
       .groupBy(
-        window($"pickup_ts", "1 minute", "30 seconds"), // 1-min tumbling window, advanced every 30s
-        $"vehicle_type"
+        window(col("event_ts"), "5 minutes"), // fenêtre de 5 min
+        col("Vehicle Type")
       )
       .agg(
         count("*").alias("ride_count"),
-        avg($"fare_amount").alias("avg_fare")
+        avg("Booking Value").alias("avg_fare"),
+        avg("Ride Distance").alias("avg_distance")
       )
       .select(
-        $"window.start".alias("window_start"),
-        $"window.end".alias("window_end"),
-        $"vehicle_type",
-        $"ride_count",
-        $"avg_fare"
+        col("window.start").alias("window_start"),
+        col("window.end").alias("window_end"),
+        col("Vehicle Type").alias("vehicle_type"),
+        col("ride_count"),
+        col("avg_fare"),
+        col("avg_distance")
       )
 
-    // Write aggregated stream to Parquet (append mode)
+    // Écriture Parquet
     val query = aggDF.writeStream
       .format("parquet")
       .option("path", parquetOut)
@@ -78,12 +94,9 @@ object SparkStreamingApp {
       .trigger(org.apache.spark.sql.streaming.Trigger.ProcessingTime("10 seconds"))
       .start()
 
-    println(s" Spark streaming started!")
-    println(s"   Kafka topic: $kafkaTopic")
-    println(s"   Parquet output: $parquetOut")
-    println(s"   Checkpoint: ${parquetOut}/../checkpoint")
-    println("   Waiting for data... (Press Ctrl+C to stop)")
-
+    println("✅ Spark streaming démarré !")
+    println(s"   Topic Kafka : $kafkaTopic")
+    println(s"   Sortie Parquet : $parquetOut")
     spark.streams.awaitAnyTermination()
   }
 }

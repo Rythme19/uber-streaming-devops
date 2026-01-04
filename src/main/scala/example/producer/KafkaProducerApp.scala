@@ -58,7 +58,7 @@ object KafkaProducerApp {
         val json = s"{${fields.mkString(",")}}"
 
         // Use vehicle_type as key (improves partition locality)
-        val key = Option(row.getAs[String]("vehicle_type")).orNull
+        val key = Option(row.getAs[String]("Vehicle Type")).orNull
 
         producer.send(new ProducerRecord(topic, key, json))
 
