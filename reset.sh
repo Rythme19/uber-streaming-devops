@@ -16,7 +16,7 @@ docker exec kafka-devops /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092 \
   --create --topic uber_topic --partitions 4 --replication-factor 1
 
-echo "🧹 Removing Spark output and checkpoint directories"
+echo " Removing Spark output and checkpoint directories"
 rm -rf /tmp/uber_stream_output
 
 echo "✅ Reset complete. Ready for a fresh run!"

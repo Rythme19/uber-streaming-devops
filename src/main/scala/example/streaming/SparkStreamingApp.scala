@@ -19,6 +19,7 @@ object SparkStreamingApp {
     val kafkaTopic     = sys.props.getOrElse("kafka.topic", "uber_topic")
     val parquetOut     = sys.props.getOrElse("parquet.out", "/tmp/uber_stream_output/parquet")
 
+
     // ✅ Schéma exact basé sur les colonnes réelles du CSV
     val schema = new StructType()
       .add("Date", StringType)
